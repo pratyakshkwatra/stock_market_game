@@ -1,10 +1,10 @@
-import mysql.connector
-import yfinance as yf
-import nsepython as nse
-import matplotlib.pyplot as plt
-import random
-import datetime
-import hashlib
+from mysql.connector import connect as mysql_connect, Error as mysql_Error
+from yfinance import download as yf_download, ticker as yf_Ticker
+from nsepython import nse_eq_symbols
+from matplotlib.pyplot import figure as plt_figure, plot as plt_plot, title as plt_title, xlabel as plt_xlabel, ylabel as plt_ylabel, show as plt_show
+from random import sample, choice, randint, random
+from datetime import datetime, timedelta
+from hashlib import sha256
 
 db_config = {
     'user': 'root',
@@ -14,24 +14,24 @@ db_config = {
 }
 
 def get_db_connection():
-    return mysql.connector.connect(**db_config)
+    return mysql_connect(**db_config)
 
 def create_user(username, password):
-    hashed_password = hashlib.sha256(password.encode()).hexdigest()
+    hashed_password = sha256(password.encode()).hexdigest()
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password))
         conn.commit()
         print("User created successfully!")
-    except mysql.connector.Error as err:
+    except mysql_Error as err:
         print(f"Error: {err}")
     finally:
         cursor.close()
         conn.close()
 
 def login_user(username, password):
-    hashed_password = hashlib.sha256(password.encode()).hexdigest()
+    hashed_password = sha256(password.encode()).hexdigest()
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT id, score FROM users WHERE username = %s AND password = %s", (username, hashed_password))
@@ -50,7 +50,7 @@ def update_score(user_id, game_type, score):
     cursor = conn.cursor()
     cursor.execute("UPDATE users SET score = score + %s WHERE id = %s", (score, user_id))
     cursor.execute("INSERT INTO scores (user_id, game_type, score, date_played) VALUES (%s, %s, %s, %s)",
-                   (user_id, game_type, score, datetime.datetime.now()))
+                   (user_id, game_type, score, datetime.now()))
     conn.commit()
     cursor.close()
     conn.close()
@@ -67,38 +67,38 @@ nse_small = [
     'LT.NS', 'HCLTECH.NS', 'AXISBANK.NS', 'MARUTI.NS', 'ASIANPAINT.NS',
     'ULTRACEMCO.NS', 'M&M.NS', 'SUNPHARMA.NS', 'BAJFINANCE.NS', 'TITAN.NS'
 ]
-nse_entirety = nse.nse_eq_symbols()
+nse_entirety = nse_eq_symbols()
 
 def fetch_stock_data(ticker, start=None, end=None):
     if start and end:
-        return yf.download(ticker, start=start, end=end)
-    return yf.download(ticker, period='max')
+        return yf_download(ticker, start=start, end=end)
+    return yf_download(ticker, period='max')
 
 def plot_stock_data(stock_data, title):
-    plt.figure(figsize=(10, 5))
-    plt.plot(stock_data['Close'])
-    plt.title(title)
-    plt.xlabel('Date')
-    plt.ylabel('Close Price')
-    plt.show(block=False)
+    plt_figure(figsize=(10, 5))
+    plt_plot(stock_data['Close'])
+    plt_title(title)
+    plt_xlabel('Date')
+    plt_ylabel('Close Price')
+    plt_show(block=False)
 
 def get_stock_info(ticker):
-    stock_info = yf.Ticker(ticker).info
+    stock_info = yf_Ticker(ticker).info
     name = stock_info.get('shortName', ticker)
     industry = stock_info.get('industry', 'Unknown')
     return name, industry
 
 def game1(user, stock_list):
-    select_stocks = random.sample(stock_list, 4) 
+    select_stocks = sample(stock_list, 4) 
     select_stocks_nse = [stc + '.NS' for stc in select_stocks]
     if stock_list == nse_entirety:
         selected_stocks = select_stocks_nse
     else:
         selected_stocks = select_stocks
-    correct_stock = random.choice(selected_stocks)
+    correct_stock = choice(selected_stocks)
     
-    end_date = datetime.datetime.now()
-    start_date = end_date - datetime.timedelta(days=3*365)
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=3*365)
     
     stock_data = fetch_stock_data(correct_stock, start=start_date, end=end_date)
     
@@ -122,13 +122,13 @@ def game1(user, stock_list):
         update_score(user['id'], 'game1', 0)
 
 def game2(user, stock_list):
-    select_stocks = random.sample(stock_list, 4)
+    select_stocks = sample(stock_list, 4)
     select_stocks_nse = [stc + '.NS' for stc in select_stocks]
     if stock_list == nse_entirety:
         selected_stocks = select_stocks_nse
     else:
         selected_stocks = select_stocks
-    correct_stock = random.choice(selected_stocks)
+    correct_stock = choice(selected_stocks)
     stock_data = fetch_stock_data(correct_stock)
 
     stock_name, industry = get_stock_info(correct_stock)
@@ -138,11 +138,11 @@ def game2(user, stock_list):
     duration_years = 3
 
     def get_random_start_date(first_date, last_date, duration_years):
-        max_start_date = last_date - datetime.timedelta(days=duration_years*365)
+        max_start_date = last_date - timedelta(days=duration_years*365)
         
         try:
-            random_start_date = first_date + datetime.timedelta(
-                days=random.randint(0, (max_start_date - first_date).days)
+            random_start_date = first_date + timedelta(
+                days=randint(0, (max_start_date - first_date).days)
             )
         except:
             return None
@@ -154,16 +154,16 @@ def game2(user, stock_list):
     if random_start_date == None:
         return None
     
-    random_end_date = random_start_date + datetime.timedelta(days=duration_years*365)
+    random_end_date = random_start_date + timedelta(days=duration_years*365)
 
     three_year_data = stock_data[random_start_date:random_end_date]
 
-    one_year_later_start = random_end_date + datetime.timedelta(days=1)
-    one_year_later_end = one_year_later_start + datetime.timedelta(days=365)
+    one_year_later_start = random_end_date + timedelta(days=1)
+    one_year_later_end = one_year_later_start + timedelta(days=365)
     one_year_data = stock_data[one_year_later_start:one_year_later_end]
     average_price_one_year_later = one_year_data['Close'].mean()
 
-    if random.random() < 0.8:
+    if random() < 0.8:
         display_title = f"Guess the Stock Movement (Stock: {stock_name}, Industry: {industry})"
     else:
         display_title = f"Guess the Stock Movement (Industry: {industry})"
