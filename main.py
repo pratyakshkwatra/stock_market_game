@@ -1,5 +1,5 @@
 from mysql.connector import connect as mysql_connect, Error as mysql_Error
-from yfinance import download as yf_download, ticker as yf_Ticker
+from yfinance import download as yf_download, Ticker as yf_Ticker
 from nsepython import nse_eq_symbols
 from matplotlib.pyplot import figure as plt_figure, plot as plt_plot, title as plt_title, xlabel as plt_xlabel, ylabel as plt_ylabel, show as plt_show
 from random import sample, choice, randint, random
@@ -8,7 +8,7 @@ from hashlib import sha256
 
 db_config = {
     'user': 'root',
-    'password': 'password',
+    'password': input("Database Password: "),
     'host': 'localhost',
     'database': 'stock_game'
 }
