@@ -5,16 +5,73 @@ from matplotlib.pyplot import figure as plt_figure, plot as plt_plot, title as p
 from random import sample, choice, randint, random
 from datetime import datetime, timedelta
 from hashlib import sha256
+db_password = None
+
 
 db_config = {
     'user': 'root',
-    'password': input("Database Password: "),
+    'password': db_password,
     'host': 'localhost',
     'database': 'stock_game'
 }
 
 def get_db_connection():
-    return mysql_connect(**db_config)
+    try:
+        db_config['password'] = db_password
+        conn = mysql_connect(**db_config)
+        return conn
+    except mysql_Error as err:
+        print(f"Error: {err}")
+        return None
+
+def setup_database():
+    conn = mysql_connect(user='root', password=db_password, host='localhost')
+    if conn:
+        cursor = conn.cursor()
+        cursor.execute("CREATE DATABASE IF NOT EXISTS stock_game")
+        cursor.execute("USE stock_game")
+        
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(50) UNIQUE NOT NULL,
+            password VARCHAR(100) NOT NULL,
+            score INT DEFAULT 0
+        )""")
+        
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS scores (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT,
+            game_type VARCHAR(10),
+            score INT,
+            date_played DATETIME,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )""")
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+def login_menu():
+    global user
+    print("1. Create User")
+    print("2. Login")
+    choice = int(input("Choose an option: "))
+    username = input("Enter a username: ")
+    password = input("Enter a password: ")
+    if choice == 1:
+        user = create_user(username, password)
+        if user:
+            main_menu()
+    elif choice == 2:
+        user = login_user(username, password)
+        if user:
+            main_menu()
+        else:
+            print("Login failed.")
+    else:
+        print("Invalid choice.")
 
 def create_user(username, password):
     hashed_password = sha256(password.encode()).hexdigest()
@@ -23,9 +80,13 @@ def create_user(username, password):
     try:
         cursor.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password))
         conn.commit()
+        cursor.execute("SELECT id, score FROM users WHERE username = %s", (username,))
+        user = cursor.fetchone()
         print("User created successfully!")
+        return {'id': user[0], 'score': user[1]}
     except mysql_Error as err:
         print(f"Error: {err}")
+        return None
     finally:
         cursor.close()
         conn.close()
@@ -43,7 +104,28 @@ def login_user(username, password):
         return user
     else:
         print("Invalid credentials")
+        login_menu()
         return None
+
+def delete_user(user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(f"DELETE FROM scores WHERE user_id = {user_id}")
+    cursor.execute(f"DELETE FROM users WHERE id = {user_id}")
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("Account deleted successfully!")
+    login_menu()
+
+def update_username(user_id, new_username):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET username = %s WHERE id = %s", (new_username, user_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("Username changed successfully!")
 
 def update_score(user_id, game_type, score):
     conn = get_db_connection()
@@ -55,6 +137,31 @@ def update_score(user_id, game_type, score):
     cursor.close()
     conn.close()
 
+def view_leaderboard():
+    global user
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT username, score FROM users where score != 0 order by score desc")
+    result = cursor.fetchall()
+    for players in result:
+        print(f"Player: {players[0]}, Total Score: {players[1]}")
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+def view_score():
+    global user
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT score FROM users WHERE id = {user['id']}")
+    result = cursor.fetchone()
+    total_score = result[0] if result[0] is not None else 0
+    print("Total Score:", total_score)
+    conn.commit()
+    cursor.close()
+    conn.close()    
+
+    
 global_stocks = [
     'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META',
     'TSLA', 'BRK-B', 'NVDA', 'JPM', 'JNJ',
@@ -151,8 +258,8 @@ def game2(user, stock_list):
 
     random_start_date = get_random_start_date(start_date, end_date, duration_years)
     
-    if random_start_date == None:
-        return None
+    if random_start_date is None:
+        return
     
     random_end_date = random_start_date + timedelta(days=duration_years*365)
 
@@ -166,6 +273,8 @@ def game2(user, stock_list):
     if random() < 0.8:
         display_title = f"Guess the Stock Movement (Stock: {stock_name}, Industry: {industry})"
     else:
+        bonus = True
+        print("Bonus Question! Guess without the stock name for extra points!")
         display_title = f"Guess the Stock Movement (Industry: {industry})"
 
     plot_stock_data(three_year_data, display_title)
@@ -186,38 +295,56 @@ def game2(user, stock_list):
     if guess == correct_answer:
         print("Correct!")
         update_score(user['id'], 'game2', 10)
+        if 'bonus' in locals() and bonus == True:
+            print("Extra 5 points for answering bonus question!")
+            update_score(user['id'], 'game2', 5)
     else:
         print(f"Wrong! The correct answer was {correct_answer}.")
         update_score(user['id'], 'game2', 0)
 
 def main():
-    print("1. Create User")
-    print("2. Login")
-    choice = int(input("Choose an option: "))
+    global db_password
+    db_password = input("SQL Root Password: ")
+    setup_database()
+    login_menu()
+    while True:
+        main_menu()
 
+def main_menu():
+    print("1. Play")
+    print("2. Account Settings")
+    print("3. View Leaderboard")
+    print("4. View score")
+    choice = int(input("Choose an option: "))
     if choice == 1:
-        username = input("Enter a username: ")
-        password = input("Enter a password: ")
-        create_user(username, password)
+        game_menu()
     elif choice == 2:
-        username = input("Enter your username: ")
-        password = input("Enter your password: ")
-        user = login_user(username, password)
-        if user:
-            print("1. Play Game 1")
-            print("2. Play Game 2")
-            game_choice = int(input("Choose a game: "))
-            if game_choice == 1:
-                game1(user, global_stocks)
-            elif game_choice == 2:
-                game2_result = game2(user, nse_entirety)
-                
-                while game2_result == None:
-                    game2_result = game2(user, nse_entirety)
-        else:
-            print("Login failed.")
-    else:
-        print("Invalid choice.")
+        account_menu()
+    elif choice == 3:
+        view_leaderboard()
+    elif choice == 4:
+        view_score()
+
+def account_menu():
+    global user
+    print("1. Delete Account")
+    print("2. Change Username")
+    menu_choice = int(input("Choose an option: "))
+    if menu_choice == 1:
+        delete_user(user['id'])
+    elif menu_choice == 2:
+        new_username = input("Enter new username:")
+        update_username(user['id'], new_username)
+
+def game_menu():
+    global user
+    print("1. Game 1")
+    print("2. Game 2")
+    game_choice = int(input("Choose a game: "))
+    if game_choice == 1:
+        game1(user, global_stocks)
+    elif game_choice == 2:
+        game2(user, nse_entirety)
 
 if __name__ == "__main__":
     main()
