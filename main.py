@@ -315,6 +315,7 @@ def main_menu():
     print("2. Account Settings")
     print("3. View Leaderboard")
     print("4. View score")
+    print("5. Quit")
     choice = int(input("Choose an option: "))
     if choice == 1:
         game_menu()
@@ -324,6 +325,11 @@ def main_menu():
         view_leaderboard()
     elif choice == 4:
         view_score()
+    elif choice == 5:
+        quit()
+    else:
+        print("Invalid Choice")
+        main_menu()
 
 def account_menu():
     global user
