@@ -1,6 +1,6 @@
 # 📈 Stock Market Game
 
-Welcome to the **Stock Market Game**, a Grade 12 Computer Science project by **Pratyaksh Kwatra** and **Aarav Rai**. This project combines finance, technology, and gamification to offer users an engaging way to learn about stocks and the stock market.
+Welcome to the **Stock Market Game**, a Grade 12 Computer Science project by [Pratyaksh Kwatra](https://github.com/pratyakshkwatra) and [Aarav Rai](https://github.com/Aarav-Rai). This project combines finance, technology, and gamification to offer users an engaging way to learn about stocks and the stock market.
 
 ## 🌟 Features
 
@@ -109,11 +109,10 @@ stock-market-game/
 - **NSE Python**: Retrieves data from the National Stock Exchange (NSE).
 
 ---
-
 ## 🤝 Contributors
 
-- **Pratyaksh Kwatra**  
-- **Aarav Rai**
+- [**Pratyaksh Kwatra**](https://github.com/pratyakshkwatra)
+- [**Aarav Rai**](https://github.com/Aarav-Rai)
 
 ---
 
