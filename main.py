@@ -5,19 +5,40 @@ from matplotlib.pyplot import figure as plt_figure, plot as plt_plot, title as p
 from random import sample, choice, randint, random
 from datetime import datetime, timedelta
 from hashlib import sha256
-db_password = None
+import keys
+import os
+import subprocess
+import sys
+import inquirer3
 
+def check_requirements():
+    if not os.path.isfile("requirements.txt"):
+        print("Error: requirements.txt not found. Exiting program.")
+        sys.exit(1)
+
+    with open("requirements.txt") as f:
+        packages = f.read().splitlines()
+
+    for package in packages:
+        try:
+            __import__(package.split('==')[0])
+        except ImportError:
+            print(f"{package} not found. Installing...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+    print("All requirements are satisfied.")
+    
+check_requirements()
 
 db_config = {
     'user': 'root',
-    'password': db_password,
+    'password': keys.password,
     'host': 'localhost',
     'database': 'stock_game'
 }
 
 def get_db_connection():
     try:
-        db_config['password'] = db_password
         conn = mysql_connect(**db_config)
         return conn
     except mysql_Error as err:
@@ -25,46 +46,43 @@ def get_db_connection():
         return None
 
 def setup_database():
-    conn = mysql_connect(user='root', password=db_password, host='localhost')
+    conn = mysql_connect(user='root', password=db_config['password'], host='localhost')
     if conn:
         cursor = conn.cursor()
-        cursor.execute("CREATE DATABASE IF NOT EXISTS stock_game")
-        cursor.execute("USE stock_game")
         
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) UNIQUE NOT NULL,
-            password VARCHAR(100) NOT NULL,
-            score INT DEFAULT 0
-        )""")
+        try:
+            with open("database_integration.sql", "r") as file:
+                sql_code_lines = [line.replace("\n", "") + ";" if line else None for line in file.read().split(";")]
+                
+                for statement in sql_code_lines:
+                    if statement:
+                        cursor.execute(statement)
+                        conn.commit()
+        except Exception as e:
+            print("Error: Missing some files")
+            print(e)
+            quit()
         
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS scores (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id INT,
-            game_type VARCHAR(10),
-            score INT,
-            date_played DATETIME,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        )""")
-        
-        conn.commit()
         cursor.close()
         conn.close()
 
 def login_menu():
     global user
-    print("1. Create User")
-    print("2. Login")
-    choice = int(input("Choose an option: "))
+    questions = [
+        inquirer3.List(
+            'auth_choice',
+            message="What would you like to proceed with?",
+            choices=['Create User', 'Login'],
+        ),
+    ]
+    choice = inquirer3.prompt(questions)["auth_choice"]
     username = input("Enter a username: ")
     password = input("Enter a password: ")
-    if choice == 1:
+    if choice == "Create User":
         user = create_user(username, password)
         if user:
             main_menu()
-    elif choice == 2:
+    elif choice == "Login":
         user = login_user(username, password)
         if user:
             main_menu()
@@ -178,8 +196,8 @@ nse_entirety = nse_eq_symbols()
 
 def fetch_stock_data(ticker, start=None, end=None):
     if start and end:
-        return yf_download(ticker, start=start, end=end)
-    return yf_download(ticker, period='max')
+        return yf_download(ticker, start=start, end=end, progress=False)
+    return yf_download(ticker, period='max', progress=False)
 
 def plot_stock_data(stock_data, title):
     plt_figure(figsize=(10, 5))
@@ -187,7 +205,7 @@ def plot_stock_data(stock_data, title):
     plt_title(title)
     plt_xlabel('Date')
     plt_ylabel('Close Price')
-    plt_show(block=False)
+    plt_show(block=True)
 
 def get_stock_info(ticker):
     stock_info = yf_Ticker(ticker).info
@@ -212,15 +230,19 @@ def game1(user, stock_list):
     _, industry = get_stock_info(correct_stock)
     
     plot_stock_data(stock_data, f"Guess the Stock (Industry: {industry})")
+    
+    import time
+    time.sleep(2)
+    questions = [
+        inquirer3.List(
+            'game_stock_choice',
+            message="Guess a stock: ",
+            choices=[get_stock_info(stock)[0] for stock in selected_stocks],
+        ),
+    ]
+    guess = inquirer3.prompt(questions)["game_stock_choice"]
 
-    print("Options:")
-    for i, stock in enumerate(selected_stocks, 1):
-        name, _ = get_stock_info(stock)
-        print(f"{i}. {name}")
-
-    guess = int(input("Enter the number of your guess: "))
-
-    if selected_stocks[guess - 1] == correct_stock:
+    if guess == correct_stock:
         print("Correct!")
         update_score(user['id'], 'game1', 10)
     else:
@@ -268,7 +290,7 @@ def game2(user, stock_list):
     one_year_later_start = random_end_date + timedelta(days=1)
     one_year_later_end = one_year_later_start + timedelta(days=365)
     one_year_data = stock_data[one_year_later_start:one_year_later_end]
-    average_price_one_year_later = one_year_data['Close'].mean()
+    average_price_one_year_later = one_year_data['Close'].mean().item()
 
     if random() < 0.8:
         display_title = f"Guess the Stock Movement (Stock: {stock_name}, Industry: {industry})"
@@ -279,9 +301,17 @@ def game2(user, stock_list):
 
     plot_stock_data(three_year_data, display_title)
 
-    guess = input("Did the stock go up or down after the 3 year period? (up/down/up a lot/down a lot): ").strip().lower()
+    questions = [
+        inquirer3.List(
+            'choice',
+            message="Did the stock go up or down after the 3 year period?",
+            choices=['up a lot', 'up', 'down', 'down a lot'],
+        ),
+    ]
+    guess = inquirer3.prompt(questions)
 
-    final_price = three_year_data['Close'].iloc[-1]
+    final_price = three_year_data['Close'].iloc[-1].item()
+    
     if average_price_one_year_later > final_price:
         correct_answer = "up"
     else:
@@ -303,29 +333,30 @@ def game2(user, stock_list):
         update_score(user['id'], 'game2', 0)
 
 def main():
-    global db_password
-    db_password = input("SQL Root Password: ")
     setup_database()
     login_menu()
     while True:
         main_menu()
 
 def main_menu():
-    print("1. Play")
-    print("2. Account Settings")
-    print("3. View Leaderboard")
-    print("4. View score")
-    print("5. Quit")
-    choice = int(input("Choose an option: "))
-    if choice == 1:
+    questions = [
+        inquirer3.List(
+            'main_menu_choice',
+            message="What would you like to proceed with?",
+            choices=['Play', 'Account Settings', "View Leaderboard", "View Score", "Quit"],
+        ),
+    ]
+    choice = inquirer3.prompt(questions)["main_menu_choice"]
+    
+    if choice == "Play":
         game_menu()
-    elif choice == 2:
+    elif choice == "Account Settings":
         account_menu()
-    elif choice == 3:
+    elif choice == "View Leaderboard":
         view_leaderboard()
-    elif choice == 4:
+    elif choice == "View Score":
         view_score()
-    elif choice == 5:
+    elif choice == "Quit":
         quit()
     else:
         print("Invalid Choice")
@@ -333,24 +364,52 @@ def main_menu():
 
 def account_menu():
     global user
-    print("1. Delete Account")
-    print("2. Change Username")
-    menu_choice = int(input("Choose an option: "))
-    if menu_choice == 1:
+    questions = [
+        inquirer3.List(
+            'account_menu_choice',
+            message="What would you like to proceed with?",
+            choices=['Delete Account', 'Update Username', "Main Menu", "Quit"],
+        ),
+    ]
+    menu_choice = inquirer3.prompt(questions)["account_menu_choice"]
+    if menu_choice == "Delete Account":
         delete_user(user['id'])
-    elif menu_choice == 2:
+    elif menu_choice == "Update Username":
         new_username = input("Enter new username:")
         update_username(user['id'], new_username)
+    elif menu_choice == "Main Menu":
+        return
+    elif menu_choice == "Quit":
+        quit()
+    else:
+        print("Invalid Choice")
+        return
 
 def game_menu():
     global user
-    print("1. Game 1")
-    print("2. Game 2")
-    game_choice = int(input("Choose a game: "))
-    if game_choice == 1:
-        game1(user, global_stocks)
-    elif game_choice == 2:
-        game2(user, nse_entirety)
+    
+    questions = [
+        inquirer3.List(
+            'game_menu_choice',
+            message="What would you like to proceed with?",
+            choices=['Game 1', 'Game 2', "Main Menu", "Quit"],
+        ),
+    ]
+    game_choice = inquirer3.prompt(questions)["game_menu_choice"]
+    
+    if game_choice == "Game 1":
+        while True:
+            game1(user, global_stocks)
+    elif game_choice == "Game 2":
+        while True:
+            game2(user, nse_entirety)
+    elif game_choice == "Main Menu":
+        return
+    elif game_choice == "Quit":
+        quit()
+    else:
+        print("Invalid Choice")
+        return
 
 if __name__ == "__main__":
     main()
