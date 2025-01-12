@@ -222,6 +222,7 @@ def game1(user, stock_list):
     else:
         selected_stocks = select_stocks
     correct_stock = choice(selected_stocks)
+    correct_stock_full = get_stock_info(choice(selected_stocks))[0]
     
     end_date = datetime.now()
     start_date = end_date - timedelta(days=3*365)
@@ -243,12 +244,11 @@ def game1(user, stock_list):
     ]
     guess = inquirer3.prompt(questions)["game_stock_choice"]
 
-    if guess == correct_stock:
+    if guess == correct_stock_full:
         print("Correct!")
         update_score(user['id'], 'game1', 10)
     else:
-        correct_name, _ = get_stock_info(correct_stock)
-        print(f"Wrong! The correct answer was {correct_name}.")
+        print(f"Wrong! The correct answer was {correct_stock_full}.")
         update_score(user['id'], 'game1', 0)
 
 def game2(user, stock_list):
@@ -299,18 +299,7 @@ def game2(user, stock_list):
         bonus = True
         print("Bonus Question! Guess without the stock name for extra points!")
         display_title = f"Guess the Stock Movement (Industry: {industry})"
-
-    plot_stock_data(three_year_data, display_title)
-
-    questions = [
-        inquirer3.List(
-            'choice',
-            message="Did the stock go up or down after the 3 year period?",
-            choices=['up a lot', 'up', 'down', 'down a lot'],
-        ),
-    ]
-    guess = inquirer3.prompt(questions)
-
+    
     final_price = three_year_data['Close'].iloc[-1].item()
     
     if average_price_one_year_later > final_price:
@@ -323,15 +312,30 @@ def game2(user, stock_list):
     elif average_price_one_year_later < final_price * 0.7:
         correct_answer = "down a lot"
 
+    plot_stock_data(three_year_data, display_title)
+
+    questions = [
+        inquirer3.List(
+            'choice',
+            message="Did the stock go up or down after the 3 year period?",
+            choices=['up a lot', 'up', 'down', 'down a lot'],
+        ),
+    ]
+    guess = inquirer3.prompt(questions)["choice"]
+
     if guess == correct_answer:
-        print("Correct!")
-        update_score(user['id'], 'game2', 10)
+        print("Precisely Correct!")
+        update_score(user['id'], 'game2', 15)
         if 'bonus' in locals() and bonus == True:
             print("Extra 5 points for answering bonus question!")
             update_score(user['id'], 'game2', 5)
     else:
-        print(f"Wrong! The correct answer was {correct_answer}.")
-        update_score(user['id'], 'game2', 0)
+        if guess == (correct_answer + " a lot") or correct_answer == (guess + " a lot"):
+            print("Correct!")
+            update_score(user['id'], 'game2', 10)
+        else:
+            print(f"Wrong! The correct answer was {correct_answer}.")
+            update_score(user['id'], 'game2', 0)
 
 def main():
     setup_database()
