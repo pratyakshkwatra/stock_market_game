@@ -1,0 +1,5 @@
+mysql-connector-python
+yfinance
+nsepython
+matplotlib
+inquirer3
